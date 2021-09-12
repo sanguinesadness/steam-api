@@ -1,9 +1,9 @@
 var express = require("express");
 var router = express.Router();
 
-var { login, logout, retrieveAPIKey, isLoggedOn } = require("../public/javascripts/user");
-var fs = require("fs");
-var path = require("path");
+const { login, logout, retrieveAPIKey, isLoggedOn, startCheckingOffers, cancelOffer, declineOffer } = require("../public/javascripts/user");
+const fs = require("fs");
+const path = require("path");
 
 let state = {
     user: { login: "", password: "", guard: "" },
@@ -53,19 +53,32 @@ router.post("/login", function (req, res, next) {
             state.cookies = response.cookies;
 
             retrieveAPIKey("anus228", state.sessionID, state.cookies)
-                .then(key => state.APIKey = key)
+                .then(key => {
+                    state.APIKey = key;
+
+                    startCheckingOffers(state.APIKey)
+                        .then(offer => {
+                            if (offer.is_our_offer) {
+                                cancelOffer(state.APIKey, offer.tradeofferid);
+                            }
+                            else {
+                                declineOffer(state.APIKey, offer.tradeofferid);
+                            }
+                        })
+                        .catch();
+                })
                 .finally(() => {
                     updateJSON();
                     res.send(response);
                 });
         })
         .catch(error => {
-            res.status(401).send(error);
+            res.status(400).send(error);
         });
 });
 
 router.post("/logout", function (req, res, next) {
     logout().then(() => res.status(200).send("Logged Out"));
-})
+});
 
 module.exports = router;

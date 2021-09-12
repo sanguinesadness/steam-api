@@ -2,6 +2,7 @@ const axios = require("axios");
 const qs = require("qs");
 const SteamUser = require("steam-user");
 const HTMLParser = require("node-html-parser");
+const EResult = require("steam-user/enums/EResult");
 
 const client = new SteamUser();
 const communityURL = 'https://steamcommunity.com';
@@ -184,7 +185,7 @@ const login = async (login, password, guard) => {
         }
 
         client.on("steamGuard", function(domain, callback) {
-            // blablabla
+            reject({ eresult: EResult.AccountLoginDeniedNeedTwoFactor });
         });
 
         client.on("error", function (error) {
@@ -197,6 +198,85 @@ const login = async (login, password, guard) => {
                 cookies: cookies
             });
         })
+    });
+}
+
+const cancelOffer = async (apiKey, offerId) => {
+    const data = {
+        key: apiKey,
+        tradeofferid: offerId
+    };
+
+    return new Promise((resolve, reject) => {
+        axios.post("https://api.steampowered.com/IEconService/CancelTradeOffer/v1/", qs.stringify(data))
+             .then(response => {
+                 console.log(`Offer ${offerId} cancelled ✓`);
+                 resolve(response);
+             })
+             .catch(error => reject(error));
+    });
+}
+
+const declineOffer = async (apiKey, offerId) => {
+    const data = {
+        key: apiKey,
+        tradeofferid: offerId
+    };
+
+    return new Promise((resolve, reject) => {
+        axios.post("https://api.steampowered.com/IEconService/DeclineTradeOffer/v1/", qs.stringify(data))
+             .then(response => {
+                 console.log(`Offer ${offerId} declined ✓`);
+                 resolve(response);
+             })
+             .catch(error => reject(error));
+    });
+}
+
+const getActiveOffers = async (apiKey) => {
+    const config = {
+        params: {
+            key: apiKey,
+            get_sent_offers: 1,
+            get_received_offers: 1,
+            active_only: 1
+        }
+    };
+
+    return new Promise((resolve, reject) => {
+        axios.get("https://api.steampowered.com/IEconService/GetTradeOffers/v1/", config)
+             .then(response => resolve(response.data.response))
+             .catch(error => reject(error));
+    });
+}
+
+const startCheckingOffers = async (apiKey) => {
+    return new Promise((resolve, reject) => {
+        const checkingInterval = setInterval(() => {
+            console.log("Checking offers...");
+
+            getActiveOffers(apiKey)
+                .then(offers => {
+                    try {
+                        const firstSentOffer = offers.trade_offers_sent ? offers.trade_offers_sent[0] : "";
+                        const firstReceivedOffer = offers.trade_offers_received ? offers.trade_offers_received[0] : "";
+
+                        if (firstSentOffer.trade_offer_state == 9) {
+                            console.log(`Sent Offer ${firstSentOffer.tradeofferid} found`);
+                            clearInterval(checkingInterval);
+                            resolve(firstSentOffer);
+                        }
+                        
+                        if (firstReceivedOffer.trade_offer_state == 2) {
+                            console.log(`Incoming Offer ${firstReceivedOffer.tradeofferid} found`);
+                            clearInterval(checkingInterval);
+                            resolve(firstReceivedOffer);
+                        }
+                    }
+                    catch {}
+                })
+                .catch();
+        }, 1000);
     });
 }
 
@@ -215,4 +295,4 @@ const logout = async () => {
     });
 }
 
-module.exports = { login, logout, requestAPIKey, retrieveAPIKey, isLoggedOn };
+module.exports = { login, logout, requestAPIKey, retrieveAPIKey, isLoggedOn, getActiveOffers, startCheckingOffers, cancelOffer, declineOffer };
