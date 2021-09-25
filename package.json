@@ -13,9 +13,11 @@
     "express": "~4.16.1",
     "http-errors": "~1.6.3",
     "jade": "~1.11.0",
+    "locutus": "^2.0.15",
     "morgan": "~1.9.1",
     "node-html-parser": "^4.1.4",
     "qs": "^6.10.1",
-    "steam-user": "^4.19.12"
+    "steam-user": "^4.19.12",
+    "steamcommunity": "^3.43.1"
   }
 }
