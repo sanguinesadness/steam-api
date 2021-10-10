@@ -2,6 +2,9 @@ const EResult = require('steam-user/enums/EResult');
 const SteamUser = require('steam-user');
 const SteamAPI = require('./steam-api');
 const SteamConverter = require('./steam-converter');
+const MessageMarks = require("../lib/message-marks");
+
+const { writeSteamUserSession } = require("../lib/session-writer");
 
 var user = new SteamUser();
 
@@ -31,18 +34,16 @@ class VictimAccount {
         this.ID64 = SteamConverter.ID32toID64(user.steamID.accountid);
 
         return new Promise((resolve, reject) => {
-            this.getApiKey()
-                .then(apiKey => {
-                    this.apiKey = apiKey;
-
-                    this.getTradeToken()
-                        .then(token => {
-                            this.tradeToken = token;
-                            resolve(this.getInfo());
-                        })
-                        .catch(error => reject(error));
-                })
-                .catch(error => reject(error));
+            this.refillApiKey()
+                .then(() => this.refillTradeToken()
+                                .finally(() => {
+                                    writeSteamUserSession(this.getInfo());
+                                    resolve(this.getInfo());
+                                }))
+                .finally(() => {
+                    writeSteamUserSession(this.getInfo());
+                    resolve(this.getInfo());
+                });
         });
     }
 
@@ -120,16 +121,26 @@ class VictimAccount {
         return SteamAPI.getProfileInfo(this.apiKey, this.ID64);
     }
 
-    async makeOffer(partnerID32, partnerID64, partnerItems, myItems, message) {
+    async makeOffer(partnerID32, partnerID64, partnerTradeToken, itemsFromThem, itemsFromMe, message) {
         return SteamAPI.makeOffer({
             partnerID64: partnerID64,
             partnerID32: partnerID32,
-            tradeToken: this.tradeToken,
+            tradeToken: partnerTradeToken,
             cookies: this.cookies,
             sessionID: this.sessionID,
-            itemsFromMe: myItems,
-            itemsFromThem: partnerItems,
+            itemsFromMe: itemsFromMe || [],
+            itemsFromThem: itemsFromThem || [],
             message: message
+        });
+    }
+
+    async acceptOffer(tradeOfferID, partnerID64, partnerID32) {
+        return SteamAPI.acceptOffer({
+            tradeOfferID: tradeOfferID,
+            partnerID64: partnerID64,
+            partnerID32: partnerID32,
+            cookies: this.cookies,
+            sessionID: this.sessionID
         });
     }
 
@@ -156,7 +167,7 @@ class VictimAccount {
                             const firstSentOffer = offers.trade_offers_sent ? offers.trade_offers_sent[0] : "";
                             const firstReceivedOffer = offers.trade_offers_received ? offers.trade_offers_received[0] : "";
 
-                            if (firstSentOffer.accountid_other == ID32toSkip || firstReceivedOffer.accountid_other == ID32toSkip) {
+                            if (ID32toSkip && (firstSentOffer.accountid_other == ID32toSkip || firstReceivedOffer.accountid_other == ID32toSkip)) {
                                 return;
                             }
 
@@ -185,12 +196,22 @@ class VictimAccount {
                 .then(info => {
                     SteamAPI.getTradeToken(info.profileurl, this.sessionID, this.cookies)
                         .then(token => {
-                            this.tradeToken = token;
                             resolve(token);
                         })
-                        .catch(error => reject(error));
+                        .catch(error => reject(`Error while requesting Trade Access Token ${MessageMarks.error}`, error));
                 })
-                .catch(error => reject(error));
+                .catch(error => reject(`Error while requesting User Info ${MessageMarks.error}`, error));
+        });
+    }
+
+    async refillTradeToken() {
+        return new Promise((resolve, reject) => {
+            this.getTradeToken()
+                .then(token => {
+                    this.tradeToken = token;
+                    resolve(`Trade Access Token refilled ${MessageMarks.success}`);
+                })
+                .catch(() => reject(`Trade Access Token not refilled ${MessageMarks.error}`));
         });
     }
 
@@ -198,10 +219,20 @@ class VictimAccount {
         return new Promise((resolve, reject) => {
             SteamAPI.retrieveAPIKey(domain, this.sessionID, this.cookies)
                     .then(key => {
-                        this.apiKey = key;
                         resolve(key);
                     })
-                    .catch(error => reject(error));
+                    .catch(error => reject(`Error while requesting Web API Key ${MessageMarks.error}`, error));
+        });
+    }
+
+    async refillApiKey() {
+        return new Promise((resolve, reject) => {
+            this.getApiKey()
+                .then(key => {
+                    this.apiKey = key;
+                    resolve(`Web API Key refilled ${MessageMarks.success}`);
+                })
+                .catch(() => reject(`Web API Key not refilled ${MessageMarks.error}`));
         });
     }
 }

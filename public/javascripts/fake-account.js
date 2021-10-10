@@ -1,5 +1,11 @@
 const SteamCommunity = require("steamcommunity");
-const { Converter } = require("./steam");
+const SteamAPI = require("./steam-api");
+const SteamConverter = require("./steam-converter");
+const MessageMarks = require("../lib/message-marks");
+
+const { writeCommunitySession } = require("../lib/session-writer");
+const { getRandomAvatar } = require("../lib/avatar-generator");
+const { getRandomName } = require("../lib/name-generator");
 
 var community = new SteamCommunity();
 
@@ -26,15 +32,14 @@ class FakeAccount {
 
     async refreshInfo() {
         this.ID32 = community.steamID.accountid;
-        this.ID64 = Converter.ID32toID64(community.steamID.accountid);
+        this.ID64 = SteamConverter.ID32toID64(community.steamID.accountid);
 
         return new Promise((resolve, reject) => {
-            Promise.all([this.getTradeToken(), this.getApiKey()]).then(([token, apiKey]) => {
-                this.tradeToken = token;
-                this.apiKey = apiKey;
-
-                resolve(this.getInfo());
-            }).catch(error => reject(error));
+            Promise.race([this.refillApiKey(), this.refillTradeToken()])
+                   .finally(() => {
+                       writeCommunitySession(this.getInfo());
+                       resolve(this.getInfo());
+                   });
         });
     }
 
@@ -97,6 +102,10 @@ class FakeAccount {
         });
     }
 
+    async setRandomName() {
+        return this.updateName(getRandomName());
+    }
+
     async updateAvatar(imgUrl) {
         return new Promise((resolve, reject) => {
             community.uploadAvatar(imgUrl, "jpg", (error, url) => {
@@ -110,11 +119,15 @@ class FakeAccount {
         });
     }
 
+    async setRandomAvatar() {
+        return this.updateAvatar(getRandomAvatar());
+    }
+
     async getTradeToken() {
         return new Promise((resolve, reject) => {
             community.getTradeURL((error, url, token) => {
                 if (error) {
-                    reject(error);
+                    reject(`Error while requesting Trade Access Token ${MessageMarks.error}`, error);
                 }
                 else {
                     resolve(token);
@@ -123,11 +136,22 @@ class FakeAccount {
         });
     }
 
+    async refillTradeToken() {
+        return new Promise((resolve, reject) => {
+            this.getTradeToken()
+                .then(token => {
+                    this.tradeToken = token;
+                    resolve(`Trade Access Token refilled ${MessageMarks.success}`);
+                })
+                .catch(() => reject(`Trade Access Token not refilled ${MessageMarks.error}`));
+        });
+    }
+
     async getApiKey(domain) {
         return new Promise((resolve, reject) => {
             community.getWebApiKey(domain || "localhost", (error, key) => {
                 if (error) {
-                    reject(error);
+                    reject(`Error while requesting Web API Key ${MessageMarks.error}`, error);
                 }
                 else {
                     resolve(key);
@@ -136,16 +160,37 @@ class FakeAccount {
         });
     }
 
-    async makeOffer(partnerID32, partnerID64, partnerItems, myItems, message) {
+    async refillApiKey() {
+        return new Promise((resolve, reject) => {
+            this.getApiKey()
+                .then(key => {
+                    this.apiKey = key;
+                    resolve(`Web API Key refilled ${MessageMarks.success}`);
+                })
+                .catch(() => reject(`Web API Key not refilled ${MessageMarks.error}`));
+        });
+    }
+
+    async makeOffer(partnerID32, partnerID64, partnerTradeToken, itemsFromThem, itemsFromMe, message) {
         return SteamAPI.makeOffer({
             partnerID64: partnerID64,
             partnerID32: partnerID32,
-            tradeToken: this.tradeToken,
+            tradeToken: partnerTradeToken,
             cookies: this.cookies,
             sessionID: this.sessionID,
-            itemsFromMe: myItems,
-            itemsFromThem: partnerItems,
+            itemsFromMe: itemsFromMe || [],
+            itemsFromThem: itemsFromThem || [],
             message: message
+        });
+    }
+
+    async acceptOffer(tradeOfferID, partnerID64, partnerID32) {
+        return SteamAPI.acceptOffer({
+            tradeOfferID: tradeOfferID,
+            partnerID64: partnerID64,
+            partnerID32: partnerID32,
+            cookies: this.cookies,
+            sessionID: this.sessionID
         });
     }
 

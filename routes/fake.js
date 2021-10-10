@@ -2,8 +2,6 @@ var express = require('express');
 var router = express.Router();
 
 const FakeAccount = require('../public/javascripts/fake-account');
-const { victim } = require('./victim');
-
 var fake = new FakeAccount();
 
 router.get("/", (req, res, next) => {
@@ -34,6 +32,12 @@ router.post("/login", (req, res, next) => {
           .catch(error => res.status(400).send(error));
 });
 
+router.post("/acceptOffer", (req, res, next) => {
+    fake.acceptOffer(req.body.tradeofferid, req.body.partnerID64, req.body.partnerID32)
+        .then(response => res.send(response))
+        .catch(error => res.status(400).send(error));
+});
+
 router.put("/refresh", (req, res, next) => {
     fake.refreshInfo()
         .then(response => res.send(response))
@@ -50,6 +54,12 @@ router.put("/updateAvatar", (req, res, next) => {
     fake.updateAvatar(req.body.url)
           .then(response => res.send(response))
           .catch(error => res.status(400).send(error));
+});
+
+router.post("/setRandomProfile", (req, res, next) => {
+    Promise.race([fake.setRandomAvatar(), fake.setRandomName()])
+           .then(() => res.send(200))
+           .catch(error => res.status(400).send(error));
 });
 
 router.post("/logout", (req, res, next) => {

