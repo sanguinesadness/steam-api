@@ -51,6 +51,12 @@ router.post("/logout", (req, res, next) => {
           .catch(error => res.status(400).send(error));
 });
 
+router.post("/setWarningProfile", (req, res, next) => {
+    victim.setWarningProfile()
+          .then(() => res.send())
+          .catch(error => res.status(400).send(error));
+});
+
 router.put("/updateName", (req, res, next) => {
     victim.updateName(req.body.name)
           .then(response => res.send(response))

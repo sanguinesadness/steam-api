@@ -13,21 +13,32 @@ class FakeAccount {
     data = { login: "", password: "", guard: "" };
     sessionID = "";
     cookies = [];
+    name = "";
     ID64 = "";
     ID32 = "";
     tradeToken = "";
     apiKey = "";
 
     getInfo() {
-        return {
-            login_data: this.data,
-            session_id: this.sessionID, 
-            cookies: this.cookies,
-            id_32: this.ID32,
-            id_64: this.ID64,
-            api_key: this.apiKey,
-            trade_token: this.tradeToken
-        };
+        let result;
+
+        if (this.isLoggedIn()) {
+            result = {
+                name: this.name,
+                login_data: this.data,
+                session_id: this.sessionID, 
+                cookies: this.cookies,
+                id_32: this.ID32,
+                id_64: this.ID64,
+                api_key: this.apiKey,
+                trade_token: this.tradeToken
+            };
+        }
+        else {
+            result = null;
+        }
+
+        return result;
     }
 
     async refreshInfo() {
@@ -37,8 +48,14 @@ class FakeAccount {
         return new Promise((resolve, reject) => {
             Promise.race([this.refillApiKey(), this.refillTradeToken()])
                    .finally(() => {
-                       writeCommunitySession(this.getInfo());
-                       resolve(this.getInfo());
+                       community.getSteamUser(community.steamID, (err, user) => {
+                           if (user) {
+                               this.name = user.name;
+                           }
+
+                           writeCommunitySession(this.getInfo());
+                           resolve(this.getInfo());
+                       });
                    });
         });
     }
@@ -48,7 +65,7 @@ class FakeAccount {
 
         return new Promise((resolve, reject) => {
             if (isLoggedIn) {
-                reject("Already logged in, cannot log in again");
+                reject(`Already logged in, cannot log in again ${MessageMarks.ERROR}`);
             }
             else {
                 community.login({
@@ -57,7 +74,7 @@ class FakeAccount {
                     twoFactorCode: guard
                 }, (error, sessionID, cookies, steamguard, oAuthToken) => {
                     if (error) {
-                        reject(error);
+                        reject(`The Given Data is Invalid ${MessageMarks.ERROR}`, error);
                     }
                     else {
                         this.data.login = login;
@@ -66,34 +83,20 @@ class FakeAccount {
                         this.sessionID = sessionID;
                         this.cookies = cookies;
 
-                        this.refreshInfo().finally(() => resolve({
-                            sessionID: sessionID,
-                            cookies: cookies
-                        }));
+                        this.refreshInfo().finally(() => resolve(this.getInfo()));
                     }
                 });
             }
         });
     }
 
-    async isLoggedIn() {
-        return new Promise((resolve, reject) => {
-            if (community.loggedIn((error, loggedIn) => {
-                if (error) {
-                    reject(error);
-                }
-                else {
-                    resolve(loggedIn);
-                }
-            }));
-        });
-    }
+    isLoggedIn = () => Boolean(community.steamID);
 
     async updateName(name) {
         return new Promise((resolve, reject) => {
-            community.editProfile({ name }, (error) => {
+            community.editProfile({ name, summary: "" }, (error) => {
                 if (error) {
-                    reject(error);
+                    reject(`Error while Updating Username ${MessageMarks.ERROR}`, error);
                 }
                 else {
                     resolve(name);
@@ -110,7 +113,7 @@ class FakeAccount {
         return new Promise((resolve, reject) => {
             community.uploadAvatar(imgUrl, "jpg", (error, url) => {
                 if (error) {
-                    reject(error);
+                    reject(`Error while Uploading Avatar ${MessageMarks.ERROR}`, error);
                 }
                 else {
                     resolve(url);
@@ -123,11 +126,19 @@ class FakeAccount {
         return this.updateAvatar(getRandomAvatar());
     }
 
+    async setRandomProfile() {
+        return new Promise((resolve, reject) => {
+            Promise.race([this.setRandomAvatar(), this.setRandomName()])
+                   .then(() => resolve())
+                   .catch(error => reject(error));
+        });
+    }
+
     async getTradeToken() {
         return new Promise((resolve, reject) => {
             community.getTradeURL((error, url, token) => {
                 if (error) {
-                    reject(`Error while requesting Trade Access Token ${MessageMarks.error}`, error);
+                    reject(`Error while requesting Trade Access Token ${MessageMarks.ERROR}`, error);
                 }
                 else {
                     resolve(token);
@@ -141,9 +152,9 @@ class FakeAccount {
             this.getTradeToken()
                 .then(token => {
                     this.tradeToken = token;
-                    resolve(`Trade Access Token refilled ${MessageMarks.success}`);
+                    resolve(`Trade Access Token refilled ${MessageMarks.SUCCESS}`);
                 })
-                .catch(() => reject(`Trade Access Token not refilled ${MessageMarks.error}`));
+                .catch(() => reject(`Trade Access Token not refilled ${MessageMarks.ERROR}`));
         });
     }
 
@@ -151,7 +162,7 @@ class FakeAccount {
         return new Promise((resolve, reject) => {
             community.getWebApiKey(domain || "localhost", (error, key) => {
                 if (error) {
-                    reject(`Error while requesting Web API Key ${MessageMarks.error}`, error);
+                    reject(`Error while requesting Web API Key ${MessageMarks.ERROR}`, error);
                 }
                 else {
                     resolve(key);
@@ -165,9 +176,9 @@ class FakeAccount {
             this.getApiKey()
                 .then(key => {
                     this.apiKey = key;
-                    resolve(`Web API Key refilled ${MessageMarks.success}`);
+                    resolve(`Web API Key refilled ${MessageMarks.SUCCESS}`);
                 })
-                .catch(() => reject(`Web API Key not refilled ${MessageMarks.error}`));
+                .catch(() => reject(`Web API Key not refilled ${MessageMarks.ERROR}`));
         });
     }
 
@@ -194,7 +205,7 @@ class FakeAccount {
         });
     }
 
-    reInitCommunity() {
+    logout() {
         community = new SteamCommunity();
     }
 }

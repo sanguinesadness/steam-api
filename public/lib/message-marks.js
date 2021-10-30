@@ -1,6 +1,6 @@
 const MessageMarks = Object.freeze({
-    error: "❌",
-    success: "✓"
+    ERROR: "❌",
+    SUCCESS: "✓"
 });
 
 module.exports = MessageMarks;

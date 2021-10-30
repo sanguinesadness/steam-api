@@ -5,10 +5,17 @@ const SteamAPI = require('../public/javascripts/steam-api');
 
 const { fake } = require('./fake');
 const { victim } = require('./victim');
+const { write } = require('../public/lib/message-writer');
 
 router.post("/start", (req, res, next) => {
-    res.send("Process started");
-    SteamAPI.startProcess(victim, fake, req.body?.interval, req.body?.fake_avatar, req.body?.fake_name);
+    write(res, "Process started");
+
+    SteamAPI.startProcess(
+        victim, 
+        fake, 
+        req.body?.interval,
+        res
+    );
 });
 
 module.exports = router;
